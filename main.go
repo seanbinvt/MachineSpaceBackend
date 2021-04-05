@@ -6,10 +6,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"time"
 
-	userAuth "machineSpaceAPI/userAuth"
 	fileManagement "machineSpaceAPI/fileManagement"
+	userAuth "machineSpaceAPI/userAuth"
 
 	// encryption/decryption
 	"github.com/gorilla/mux" // http router used
@@ -79,6 +80,12 @@ func testAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	out, err := exec.Command("ls").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%s", out)
+
 	environment := "dev"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -110,7 +117,7 @@ func handler() {
 	//r.HandleFunc("/battlereport/{server}/{reportID}", viewBattleReport).Methods("GET", "OPTIONS")
 	r.HandleFunc("/login", login).Methods("POST", "OPTIONS")
 	r.HandleFunc("/register", signup).Methods("POST", "OPTIONS")
-	
+
 	r.HandleFunc("/upload", upload).Methods("POST", "OPTIONS")
 	log.Fatal(http.ListenAndServe(":"+port, r)) // If error then log to console
 	fmt.Println("Running on port", port)
@@ -127,6 +134,6 @@ func allowOpts(w *http.ResponseWriter, ref string) {
 	}
 
 	(*w).Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-    (*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-    (*w).Header().Set("Access-Control-Allow-Credentials", "true")
+	(*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+	(*w).Header().Set("Access-Control-Allow-Credentials", "true")
 }
