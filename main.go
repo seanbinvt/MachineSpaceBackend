@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	fileManagement "machineSpaceAPI/fileManagement"
@@ -80,7 +81,12 @@ func testAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	out, err := exec.Command("ls").Output()
+	a := "-a"
+	s := "ls " + a + " -i /"
+
+	args := strings.Split(s, " ")
+
+	out, err := exec.Command(args[0], args[1:]...).Output()
 	if err != nil {
 		log.Fatal(err)
 	}
