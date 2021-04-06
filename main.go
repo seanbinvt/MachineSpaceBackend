@@ -6,10 +6,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	//"os/exec"
+	//"strings"
 	"time"
 
-	userAuth "machineSpaceAPI/userAuth"
 	fileManagement "machineSpaceAPI/fileManagement"
+	userAuth "machineSpaceAPI/userAuth"
+	vmManagement "machineSpaceAPI/vmManagement"
 
 	// encryption/decryption
 	"github.com/gorilla/mux" // http router used
@@ -79,6 +82,8 @@ func testAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	vmManagement.StartVM()
+
 	environment := "dev"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
