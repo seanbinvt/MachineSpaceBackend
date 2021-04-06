@@ -1,6 +1,7 @@
 package userAuth
 
 import (
+	"os"
 	"context"
 	"encoding/json"
 	//"encoding/base64"
@@ -168,13 +169,21 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 					sessionCookie := &http.Cookie{
 						Name: "session",
 						Value: sessionToken,
+						Domain: "."+os.Getenv("FRONTEND"), // "/" for frontend on localhost
 						Path: "/",
+						HttpOnly: false,
+						MaxAge: 86400, //Expires after 1 day
+						SameSite: http.SameSiteLaxMode,
 					}
 
 					usernameCookie := &http.Cookie{
 						Name: "username",
 						Value: logsOut.Username,
-						Path: "/",
+						Domain: "."+os.Getenv("FRONTEND"),
+						Path: "/", // "/" for frontend on localhost
+						HttpOnly: false,
+						MaxAge: 86400, //Expires after 1 day
+						SameSite: http.SameSiteLaxMode,
 					}
 
 					//filesString := string(files)

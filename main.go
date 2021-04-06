@@ -6,12 +6,13 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"strings"
+	//"os/exec"
+	//"strings"
 	"time"
 
 	fileManagement "machineSpaceAPI/fileManagement"
 	userAuth "machineSpaceAPI/userAuth"
+	vmManagement "machineSpaceAPI/vmManagement"
 
 	// encryption/decryption
 	"github.com/gorilla/mux" // http router used
@@ -81,16 +82,7 @@ func testAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	a := "-a"
-	s := "ls " + a + " -i /"
-
-	args := strings.Split(s, " ")
-
-	out, err := exec.Command(args[0], args[1:]...).Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("%s", out)
+	vmManagement.StartVM()
 
 	environment := "dev"
 
@@ -121,10 +113,10 @@ func handler() {
 
 	r := mux.NewRouter()
 	//r.HandleFunc("/battlereport/{server}/{reportID}", viewBattleReport).Methods("GET", "OPTIONS")
-	r.HandleFunc("/login", login).Methods("POST", "OPTIONS")
-	r.HandleFunc("/register", signup).Methods("POST", "OPTIONS")
-
-	r.HandleFunc("/upload", upload).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/login", login).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/register", signup).Methods("POST", "OPTIONS")
+	
+	r.HandleFunc("/api/upload", upload).Methods("POST", "OPTIONS")
 	log.Fatal(http.ListenAndServe(":"+port, r)) // If error then log to console
 	fmt.Println("Running on port", port)
 }
@@ -140,6 +132,6 @@ func allowOpts(w *http.ResponseWriter, ref string) {
 	}
 
 	(*w).Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-	(*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-	(*w).Header().Set("Access-Control-Allow-Credentials", "true")
+    (*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+    (*w).Header().Set("Access-Control-Allow-Credentials", "true")
 }
