@@ -1,19 +1,19 @@
 package userAuth
 
 import (
-	"os"
 	"context"
 	"encoding/json"
+	"os"
+
 	//"encoding/base64"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os/exec"
 	"strings"
+
 	//"time"
 	//"io"
-
-	fileManagement "machineSpaceAPI/fileManagement"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -27,9 +27,9 @@ type LoginCred struct {
 }
 
 type LoginCredInfo struct {
-	Username string `json:"username", db:"username"`
-	Password string `json:"password", db:"password"`
-	Files []fileManagement.FileInfo `json:"files", db:"files"`
+	Username  string   `json:"username", db:"username"`
+	Password  string   `json:"password", db:"password"`
+	Snapshots []string `json:"snapshots", db:"snapshots"`
 }
 
 /*
@@ -100,6 +100,7 @@ func Signup(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 		log.Println(logs)
 
 		//dbInfo, _ := json.Marshal(logs)
+		//var emptyArray []string
 		id, err := collection.InsertOne(context.TODO(), bson.D{{"Username", logs.Username}, {"Password", logs.Password}})
 		if err != nil {
 			// If error then the username is already taken
@@ -107,7 +108,7 @@ func Signup(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 		} else {
 			// Success
 			log.Println("New user created at ID ", id)
-			jsonRes = `{"ErrorCode": 0, "Username": "`+ logs.Username +`"}`
+			jsonRes = `{"ErrorCode": 0, "Username": "` + logs.Username + `"}`
 		}
 	} else {
 		jsonRes = `{"ErrorCode": 1}`
@@ -120,14 +121,14 @@ func Signup(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 	for _, cookie := range r.Cookies() {
 		log.Println("Found a cookie named:", cookie.Name)
-	  }
+	}
 	args, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var logs LoginCred    // Logs from the user
+	var logs LoginCred        // Logs from the user
 	var logsOut LoginCredInfo // Logs from the DB for given Username
 
 	err = json.Unmarshal(args, &logs)
@@ -157,8 +158,8 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 
 			if compare {
 				// Login success
-				files, _ := json.Marshal(logsOut.Files)
-				jsonRes = `{"errorCode": 0, "username": "` + logsOut.Username + `", "files": `+ string(files) +`}`	
+				snapshots, _ := json.Marshal(logsOut.Snapshots)
+				jsonRes = `{"errorCode": 0, "username": "` + logsOut.Username + `", "snapshots": ` + string(snapshots) + `}`
 
 				sessionTokenRaw, err := exec.Command("uuidgen").Output()
 
@@ -167,32 +168,36 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 				sessionToken := strings.TrimSuffix(string(sessionTokenRaw), "\n")
 				if err == nil {
 					sessionCookie := &http.Cookie{
-						Name: "session",
-						Value: sessionToken,
-						Domain: "."+os.Getenv("FRONTEND"), // "/" for frontend on localhost
-						Path: "/",
+						Name:     "session",
+						Value:    sessionToken,
+						Domain:   "." + os.Getenv("FRONTEND"), // "/" for frontend on localhost
+						Path:     "/",
 						HttpOnly: false,
-						MaxAge: 86400, //Expires after 1 day
+						MaxAge:   86400, //Expires after 1 day
 						SameSite: http.SameSiteLaxMode,
 					}
 
 					usernameCookie := &http.Cookie{
-						Name: "username",
-						Value: logsOut.Username,
-						Domain: "."+os.Getenv("FRONTEND"),
-						Path: "/", // "/" for frontend on localhost
+						Name:     "username",
+						Value:    logsOut.Username,
+						Domain:   "." + os.Getenv("FRONTEND"),
+						Path:     "/", // "/" for frontend on localhost
 						HttpOnly: false,
-						MaxAge: 86400, //Expires after 1 day
+						MaxAge:   86400, //Expires after 1 day
 						SameSite: http.SameSiteLaxMode,
 					}
 
-					//filesString := string(files)
+					snapshotsString := string(snapshots)
 
-					/*filesCookie := &http.Cookie{
-						Name: "files",
-						Value: base64.StdEncoding.EncodeToString(files),
-						Path: "/",
-					}*/
+					snapshotsCookie := &http.Cookie{
+						Name:     "snapshots",
+						Value:    snapshotsString,
+						Domain:   "." + os.Getenv("FRONTEND"),
+						Path:     "/", // "/" for frontend on localhost
+						HttpOnly: false,
+						MaxAge:   86400, //Expires after 1 day
+						SameSite: http.SameSiteLaxMode,
+					}
 
 					update := bson.M{"$set": bson.M{"AuthToken": sessionToken}}
 					filter := bson.M{"Username": bson.M{"$eq": logsOut.Username}}
@@ -209,9 +214,9 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 						log.Printf("Updated user %s to authToken %s!\n", logsOut.Username, string(sessionToken))
 					}
 
-					http.SetCookie(w,sessionCookie)
-					http.SetCookie(w,usernameCookie)
-					//http.SetCookie(w,filesCookie)
+					http.SetCookie(w, sessionCookie)
+					http.SetCookie(w, usernameCookie)
+					http.SetCookie(w, snapshotsCookie)
 				}
 			} else {
 				// User exists, but password is wrong

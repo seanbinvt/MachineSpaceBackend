@@ -6,11 +6,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+
 	//"os/exec"
 	//"strings"
 	"time"
 
-	fileManagement "machineSpaceAPI/fileManagement"
 	userAuth "machineSpaceAPI/userAuth"
 	vmManagement "machineSpaceAPI/vmManagement"
 
@@ -52,6 +52,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+/*
 func upload(w http.ResponseWriter, r *http.Request) {
 	scheme := ""
 	if (*r).Header["Referer"] != nil {
@@ -65,7 +66,9 @@ func upload(w http.ResponseWriter, r *http.Request) {
 		fileManagement.FileUpload(w, r, db)
 	}
 }
+*/
 
+/*
 func testAuth(w http.ResponseWriter, r *http.Request) {
 	scheme := ""
 	fmt.Println("here")
@@ -80,9 +83,94 @@ func testAuth(w http.ResponseWriter, r *http.Request) {
 		//userAuth.CompareToken(w, r, db)
 	}
 }
+*/
+
+func vmCreate(w http.ResponseWriter, r *http.Request) {
+	scheme := ""
+	if (*r).Header["Referer"] != nil {
+		scheme = (*r).Header["Referer"][0][0:5]
+	}
+	allowOpts(&w, scheme)
+	if (*r).Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	} else {
+		vmManagement.CreateVM(w, r, db)
+	}
+}
+
+func vmStart(w http.ResponseWriter, r *http.Request) {
+	scheme := ""
+	if (*r).Header["Referer"] != nil {
+		scheme = (*r).Header["Referer"][0][0:5]
+	}
+	allowOpts(&w, scheme)
+	if (*r).Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	} else {
+		vmManagement.StartVM(w, r, db)
+	}
+}
+
+func vmShutdown(w http.ResponseWriter, r *http.Request) {
+	scheme := ""
+	if (*r).Header["Referer"] != nil {
+		scheme = (*r).Header["Referer"][0][0:5]
+	}
+	allowOpts(&w, scheme)
+	if (*r).Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	} else {
+		vmManagement.ShutdownVM(w, r, db)
+	}
+}
+
+func vmCreateSnapshot(w http.ResponseWriter, r *http.Request) {
+	scheme := ""
+	if (*r).Header["Referer"] != nil {
+		scheme = (*r).Header["Referer"][0][0:5]
+	}
+	allowOpts(&w, scheme)
+	if (*r).Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	} else {
+		vmManagement.CreateSnapshot(w, r, db)
+	}
+}
+
+func vmLoadSnapshot(w http.ResponseWriter, r *http.Request) {
+	scheme := ""
+	if (*r).Header["Referer"] != nil {
+		scheme = (*r).Header["Referer"][0][0:5]
+	}
+	allowOpts(&w, scheme)
+	if (*r).Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	} else {
+		vmManagement.LoadSnapshot(w, r, db)
+	}
+}
+
+func vmDeleteSnapshot(w http.ResponseWriter, r *http.Request) {
+	scheme := ""
+	if (*r).Header["Referer"] != nil {
+		scheme = (*r).Header["Referer"][0][0:5]
+	}
+	allowOpts(&w, scheme)
+	if (*r).Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	} else {
+		vmManagement.DeleteSnapshot(w, r, db)
+	}
+}
 
 func main() {
-	vmManagement.StartVM()
+	//vmManagement.StartVM()
 
 	environment := "dev"
 
@@ -105,7 +193,7 @@ func main() {
 
 var db *mongo.Database
 
-var environment string = "dev"
+//var environment string = "dev"
 
 func handler() {
 	port := os.Getenv("PORT")
@@ -115,8 +203,15 @@ func handler() {
 	//r.HandleFunc("/battlereport/{server}/{reportID}", viewBattleReport).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/login", login).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/register", signup).Methods("POST", "OPTIONS")
-	
-	r.HandleFunc("/api/upload", upload).Methods("POST", "OPTIONS")
+
+	// VM functions
+	r.HandleFunc("/api/vmCreate", vmCreate).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/vmStart", vmStart).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/vmShutdown", vmShutdown).Methods("POST", "OPTIONS")
+
+	r.HandleFunc("/api/vmCreateSnapshot", vmCreateSnapshot).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/vmLoadSnapshot", vmLoadSnapshot).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/vmDeleteSnapshot", vmDeleteSnapshot).Methods("POST", "OPTIONS")
 	log.Fatal(http.ListenAndServe(":"+port, r)) // If error then log to console
 	fmt.Println("Running on port", port)
 }
@@ -132,6 +227,6 @@ func allowOpts(w *http.ResponseWriter, ref string) {
 	}
 
 	(*w).Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-    (*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-    (*w).Header().Set("Access-Control-Allow-Credentials", "true")
+	(*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+	(*w).Header().Set("Access-Control-Allow-Credentials", "true")
 }
