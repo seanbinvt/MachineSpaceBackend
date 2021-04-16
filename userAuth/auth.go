@@ -3,7 +3,8 @@ package userAuth
 import (
 	"context"
 	"encoding/json"
-	"os"
+	"fmt"
+	"time"
 
 	//"encoding/base64"
 	"io/ioutil"
@@ -166,40 +167,46 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 				log.Println("Session:", string(sessionTokenRaw))
 
 				sessionToken := strings.TrimSuffix(string(sessionTokenRaw), "\n")
+
+				tokenAge := 86400 //One day
+				domain := ""      //os.Getenv("FRONTEND")
 				if err == nil {
 					sessionCookie := &http.Cookie{
 						Name:     "session",
 						Value:    sessionToken,
-						Domain:   "." + os.Getenv("FRONTEND"), // "/" for frontend on localhost
+						Domain:   domain, // "/" for frontend on localhost
 						Path:     "/",
 						HttpOnly: false,
-						MaxAge:   86400, //Expires after 1 day
+						MaxAge:   tokenAge, //Expires after 1 day
 						SameSite: http.SameSiteLaxMode,
 					}
 
 					usernameCookie := &http.Cookie{
 						Name:     "username",
 						Value:    logsOut.Username,
-						Domain:   "." + os.Getenv("FRONTEND"),
+						Domain:   domain,
 						Path:     "/", // "/" for frontend on localhost
 						HttpOnly: false,
-						MaxAge:   86400, //Expires after 1 day
+						MaxAge:   tokenAge, //Expires after 1 day
 						SameSite: http.SameSiteLaxMode,
 					}
 
-					snapshotsString := string(snapshots)
+					snapshotsString := strings.Replace(string(snapshots), `"`, "", -1)
+
+					fmt.Println(snapshotsString)
 
 					snapshotsCookie := &http.Cookie{
 						Name:     "snapshots",
 						Value:    snapshotsString,
-						Domain:   "." + os.Getenv("FRONTEND"),
+						Domain:   domain,
 						Path:     "/", // "/" for frontend on localhost
 						HttpOnly: false,
-						MaxAge:   86400, //Expires after 1 day
+						MaxAge:   tokenAge, //Expires after 1 day
 						SameSite: http.SameSiteLaxMode,
 					}
 
-					update := bson.M{"$set": bson.M{"AuthToken": sessionToken}}
+					fmt.Println(time.Now().Add(time.Second * time.Duration(tokenAge)))
+					update := bson.M{"$set": bson.M{"AuthToken": sessionToken, "Port": 0, "Expiration": time.Now().Add(time.Second * time.Duration(tokenAge))}}
 					filter := bson.M{"Username": bson.M{"$eq": logsOut.Username}}
 
 					_, err := collection.UpdateOne(

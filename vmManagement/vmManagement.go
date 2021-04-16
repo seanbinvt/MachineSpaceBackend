@@ -82,7 +82,7 @@ func getPort(username string, collection *mongo.Collection) int {
 			portNumber = minPort
 		} else if !found {
 			// An open port is found, return and update user port in DB
-			if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": username}, bson.D{{"$set": bson.D{{"Port": portNumber}}}}); err != nil {
+			if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": username}, bson.D{{"$set", bson.D{{"Port", portNumber}}}}); err != nil {
 				fmt.Println(err)
 			}
 			return portNumber
@@ -148,7 +148,7 @@ func StartVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 
 	//vmName := "vm1"
 
-	status := runCommand("virsh -c qemu:///system start " + usernameStruct.Username)
+	_ = runCommand("virsh -c qemu:///system start " + usernameStruct.Username)
 
 	portNumber := getPort(usernameStruct.Username, db.Collection("users"))
 
@@ -157,15 +157,18 @@ func StartVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 		sendReturn(`{"error": 2, "port":`+strconv.Itoa(portNumber)+`}`, w)
 	}
 
-	if status {
-		fmt.Println("VM Started")
+	fmt.Println("VM Started")
 
-		// Number will be from DB as user is assigned here and stored in DB.
+	// Number will be from DB as user is assigned here and stored in DB.
 
-		//If port number is already taken, check if user has it and increment by 1. FOR LOOP HERE
+	//If port number is already taken, check if user has it and increment by 1. FOR LOOP HERE
 
-		out, _ := exec.Command("virsh", "-c", "qemu:///system", "domdisplay", "--type", "spice", usernameStruct.Username).Output()
+	out, _ := exec.Command("virsh", "-c", "qemu:///system", "domdisplay", "--type", "spice", usernameStruct.Username).Output()
 
+	if len(out) < 2 {
+		fmt.Println("VM doesn't exist (ERROR)")
+		sendReturn(`{"error": 1, "port":`+strconv.Itoa(portNumber)+`}`, w)
+	} else {
 		address := "localhost:" + string(out[len(out)-5:len(out)-1])
 
 		fmt.Println("/websockify/websockify.py." + strconv.Itoa(portNumber) + "." + address + ".")
@@ -176,10 +179,6 @@ func StartVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 
 		fmt.Println("VM connected to websockify")
 		sendReturn(`{"error": 0}`, w)
-
-	} else {
-		fmt.Println("VM already started or doesn't exist (ERROR)")
-		sendReturn(`{"error": 1, "port":`+strconv.Itoa(portNumber)+`}`, w)
 	}
 
 }
@@ -260,6 +259,11 @@ func CreateSnapshot(w http.ResponseWriter, r *http.Request, db *mongo.Database) 
 
 	if status {
 		fmt.Println("Snapshot Created")
+		collection := db.Collection("users")
+
+		if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": userSnapStruct.Username}, bson.M{"$push": bson.M{"Snapshots": userSnapStruct.SnapshotName}}); err != nil {
+			fmt.Println(err)
+		}
 		sendReturn(`{"error": 0}`, w)
 	} else {
 		fmt.Println("Snapshot name already in use (ERROR)")
@@ -322,6 +326,13 @@ func DeleteSnapshot(w http.ResponseWriter, r *http.Request, db *mongo.Database) 
 
 	if status {
 		fmt.Println("Snapshot deleted")
+
+		collection := db.Collection("users")
+
+		if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": userSnapStruct.Username}, bson.M{"$pull": bson.M{"Snapshots": bson.M{"$in": userSnapStruct.SnapshotName}}}); err != nil {
+			fmt.Println(err)
+		}
+
 		sendReturn(`{"error": 0}`, w)
 	} else {
 		fmt.Println("Snapshot not found (ERROR)")
