@@ -51,20 +51,23 @@ func getPort(username string, collection *mongo.Collection) int {
 	var out Document
 
 	// Check if user is already assigned a port
-	if err := collection.FindOne(context.TODO(), bson.M{"username": username}).Decode(&out); err != nil {
+	if err := collection.FindOne(context.TODO(), bson.M{"Username": username}).Decode(&out); err != nil {
 		log.Fatal(err)
 	}
 
 	if out.Port > 0 {
 		// Username already assigned port
+		fmt.Println("here")
 		return out.Port
 	}
 
 	// All user documents that have a currently assigned port and haven't already expired
 	var docs []Document
 	var cursor *mongo.Cursor
-	cursor, _ = collection.Find(context.TODO(), bson.M{"Port": bson.M{"$ne": 0}, "Expiration": bson.M{"$lte": time.Now()}})
+	cursor, _ = collection.Find(context.TODO(), bson.M{"Port": bson.M{"$ne": 0}, "Expiration": bson.M{"$gte": time.Now()}})
 	cursor.All(context.TODO(), &docs)
+
+	fmt.Println("Docs returned:", len(docs))
 
 	// Iterate though possible ports and assign
 	portNumber := prevPort
@@ -91,6 +94,7 @@ func getPort(username string, collection *mongo.Collection) int {
 		}
 	}
 	// All ports taken.
+	fmt.Println(portNumber)
 	return 0
 }
 
@@ -115,15 +119,13 @@ func CreateVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 	}
 
 	//Possible command to make it run in background?
-	status := runCommand("virt-install --connect=qemu:///system --name " + usernameStruct.Username + " --os-type=Linux --os-variant=ubuntu20.04 --memory=2048 --vcpus=1 --disk path=/var/lib/libvirt/images/" + usernameStruct.Username + ".qcow2,bus=virtio,size=5 --graphics spice --cdrom /var/lib/kimchi/isos/ubuntu-20.04.1-desktop-amd64.iso --qemu-commandline=env=SPICE_DEBUG_ALLOW_MC=1")
+	s := "virt-install --connect=qemu:///system --name " + usernameStruct.Username + " --os-type=Linux --os-variant=ubuntu20.04 --memory=2048 --vcpus=1 --disk path=/var/lib/libvirt/images/" + usernameStruct.Username + ".qcow2,size=12 --graphics spice --cdrom /var/lib/kimchi/isos/ubuntu-20.04.1-desktop-amd64.iso --qemu-commandline=env=SPICE_DEBUG_ALLOW_MC=1"
+	argsS := strings.Split(s, " ")
+	cmd := exec.Command(argsS[0], argsS[1:]...)
+	cmd.Start()
 
-	if status {
-		fmt.Println("VM Created")
-		sendReturn(`{"error": 0}`, w)
-	} else {
-		fmt.Println("VM name already in use (ERROR)")
-		sendReturn(`{"error": 1}`, w)
-	}
+	fmt.Println("VM Created")
+	sendReturn(`{"error": 0}`, w)
 }
 
 /*
@@ -167,18 +169,18 @@ func StartVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 
 	if len(out) < 2 {
 		fmt.Println("VM doesn't exist (ERROR)")
-		sendReturn(`{"error": 1, "port":`+strconv.Itoa(portNumber)+`}`, w)
+		sendReturn(`{"error": 1}`, w)
 	} else {
 		address := "localhost:" + string(out[len(out)-5:len(out)-1])
 
 		fmt.Println("/websockify/websockify.py." + strconv.Itoa(portNumber) + "." + address + ".")
 
-		args := [3]string{"/websockify/websockify.py", strconv.Itoa(portNumber), address}
+		args := [5]string{"timeout","1d","/websockify/websockify.py", strconv.Itoa(portNumber), address}
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Start()
 
 		fmt.Println("VM connected to websockify")
-		sendReturn(`{"error": 0}`, w)
+		sendReturn(`{"error": 0, "port":`+strconv.Itoa(portNumber)+`}`, w)
 	}
 
 }
@@ -324,19 +326,59 @@ func DeleteSnapshot(w http.ResponseWriter, r *http.Request, db *mongo.Database) 
 
 	status := runCommand("virsh -c qemu:///system snapshot-delete --domain " + userSnapStruct.Username + " --snapshotname " + userSnapStruct.SnapshotName)
 
+	collection := db.Collection("users")
+
 	if status {
 		fmt.Println("Snapshot deleted")
 
-		collection := db.Collection("users")
-
-		if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": userSnapStruct.Username}, bson.M{"$pull": bson.M{"Snapshots": bson.M{"$in": userSnapStruct.SnapshotName}}}); err != nil {
+		if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": userSnapStruct.Username}, bson.M{"$pull": bson.M{"Snapshots": userSnapStruct.SnapshotName}}); err != nil {
 			fmt.Println(err)
 		}
 
 		sendReturn(`{"error": 0}`, w)
 	} else {
+		if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": userSnapStruct.Username}, bson.M{"$pull": bson.M{"Snapshots": userSnapStruct.SnapshotName}}); err != nil {
+			fmt.Println(err)
+		}
 		fmt.Println("Snapshot not found (ERROR)")
 		sendReturn(`{"error": 1}`, w)
+	}
+}
+
+func GetSnapshots(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
+	args, err := ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	collection := db.Collection("users")
+
+	var usernameStruct Username
+	err = json.Unmarshal(args, &usernameStruct)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	var out Document
+
+	if err := collection.FindOne(context.TODO(), bson.M{"Username": usernameStruct.Username}).Decode(&out); err != nil {
+		log.Println(err)
+	} else {
+
+	arrayString := "["
+
+	for i := 0; i < len(out.Snapshots); i++ {
+		if i == len(out.Snapshots) - 1 {
+			arrayString += `"`+out.Snapshots[i]+`"`
+		} else {
+			arrayString += `"`+out.Snapshots[i]+`", `
+		}
+	}
+	arrayString += `]`
+
+	sendReturn(`{"snapshots": `+arrayString+`}`, w)
 	}
 }
 

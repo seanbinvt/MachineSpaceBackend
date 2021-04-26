@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"os"
 
 	//"time"
 	//"io"
@@ -30,7 +31,6 @@ type LoginCred struct {
 type LoginCredInfo struct {
 	Username  string   `json:"username", db:"username"`
 	Password  string   `json:"password", db:"password"`
-	Snapshots []string `json:"snapshots", db:"snapshots"`
 }
 
 /*
@@ -159,8 +159,7 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 
 			if compare {
 				// Login success
-				snapshots, _ := json.Marshal(logsOut.Snapshots)
-				jsonRes = `{"errorCode": 0, "username": "` + logsOut.Username + `", "snapshots": ` + string(snapshots) + `}`
+				jsonRes = `{"errorCode": 0, "username": "` + logsOut.Username + `"}`
 
 				sessionTokenRaw, err := exec.Command("uuidgen").Output()
 
@@ -169,7 +168,7 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 				sessionToken := strings.TrimSuffix(string(sessionTokenRaw), "\n")
 
 				tokenAge := 86400 //One day
-				domain := ""      //os.Getenv("FRONTEND")
+				domain := "." + os.Getenv("FRONTEND")
 				if err == nil {
 					sessionCookie := &http.Cookie{
 						Name:     "session",
@@ -184,20 +183,6 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 					usernameCookie := &http.Cookie{
 						Name:     "username",
 						Value:    logsOut.Username,
-						Domain:   domain,
-						Path:     "/", // "/" for frontend on localhost
-						HttpOnly: false,
-						MaxAge:   tokenAge, //Expires after 1 day
-						SameSite: http.SameSiteLaxMode,
-					}
-
-					snapshotsString := strings.Replace(string(snapshots), `"`, "", -1)
-
-					fmt.Println(snapshotsString)
-
-					snapshotsCookie := &http.Cookie{
-						Name:     "snapshots",
-						Value:    snapshotsString,
 						Domain:   domain,
 						Path:     "/", // "/" for frontend on localhost
 						HttpOnly: false,
@@ -223,7 +208,6 @@ func Login(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 
 					http.SetCookie(w, sessionCookie)
 					http.SetCookie(w, usernameCookie)
-					http.SetCookie(w, snapshotsCookie)
 				}
 			} else {
 				// User exists, but password is wrong

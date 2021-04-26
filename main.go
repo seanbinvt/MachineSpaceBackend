@@ -169,6 +169,20 @@ func vmDeleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func vmGetSnapshots(w http.ResponseWriter, r *http.Request) {
+	scheme := ""
+	if (*r).Header["Referer"] != nil {
+		scheme = (*r).Header["Referer"][0][0:5]
+	}
+	allowOpts(&w, scheme)
+	if (*r).Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	} else {
+		vmManagement.GetSnapshots(w, r, db)
+	}
+}
+
 func main() {
 	//vmManagement.StartVM()
 
@@ -212,6 +226,8 @@ func handler() {
 	r.HandleFunc("/api/vmCreateSnapshot", vmCreateSnapshot).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/vmLoadSnapshot", vmLoadSnapshot).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/vmDeleteSnapshot", vmDeleteSnapshot).Methods("POST", "OPTIONS")
+
+	r.HandleFunc("/api/vmGetSnapshots", vmGetSnapshots).Methods("POST", "OPTIONS")
 	log.Fatal(http.ListenAndServe(":"+port, r)) // If error then log to console
 	fmt.Println("Running on port", port)
 }
@@ -221,7 +237,7 @@ func allowOpts(w *http.ResponseWriter, ref string) {
 		return
 	} else if ref[4] != 's' {
 		//log.Println("http://" + os.Getenv("FRONTEND"))
-		(*w).Header().Set("Access-Control-Allow-Origin", "http://"+os.Getenv("FRONTEND"))
+		(*w).Header().Set("Access-Control-Allow-Origin", "*")
 	} else {
 		(*w).Header().Set("Access-Control-Allow-Origin", "https://"+os.Getenv("FRONTEND"))
 	}
