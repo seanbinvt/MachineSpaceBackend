@@ -39,9 +39,10 @@ type Document struct {
 	Username   string    `json:"username" bson:"Username"`
 	Password   string    `json:"password" bson:"Password"`
 	AuthToken  string    `json:"authToken" bson:"AuthToken"`
-	Snapshots  []string  `json:"snapshots" bson:"snapshots"`
+	Snapshots  []string  `json:"snapshots" bson:"Snapshots"`
 	Port       int       `json:"port" bson:"Port"`
 	Expiration time.Time `json:"expiration" bson:"Expiration"` // Date that the port and authToken expires
+	VmCreated time.Time `json:"vmCreated" bson:"VmCreated"` // Date that the VM for the user was created.
 }
 
 /*
@@ -85,6 +86,7 @@ func getPort(username string, collection *mongo.Collection) int {
 			portNumber = minPort
 		} else if !found {
 			// An open port is found, return and update user port in DB
+			_ = runCommand("fuser -k "+strconv.Itoa(portNumber)+"/tcp")
 			if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": username}, bson.D{{"$set", bson.D{{"Port", portNumber}}}}); err != nil {
 				fmt.Println(err)
 			}
@@ -105,6 +107,7 @@ error 0: Creation successful.
 error 1: VM name already created.
 */
 func CreateVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
+	collection := db.Collection("users")
 	args, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
@@ -119,13 +122,21 @@ func CreateVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 	}
 
 	//Possible command to make it run in background?
-	s := "virt-install --connect=qemu:///system --name " + usernameStruct.Username + " --os-type=Linux --os-variant=ubuntu20.04 --memory=2048 --vcpus=1 --disk path=/var/lib/libvirt/images/" + usernameStruct.Username + ".qcow2,size=12 --graphics spice --cdrom /var/lib/kimchi/isos/ubuntu-20.04.1-desktop-amd64.iso --qemu-commandline=env=SPICE_DEBUG_ALLOW_MC=1"
+	s := "virt-install --connect=qemu:///system --name " + usernameStruct.Username + " --os-type=Linux --os-variant=ubuntu20.04 --memory=2048 --vcpus=1 --disk path=/var/lib/libvirt/images/" + usernameStruct.Username + ".qcow2,size=12 --video virtio --channel spicevmc --cdrom /home/gaia/Documents/install.iso --qemu-commandline=env=SPICE_DEBUG_ALLOW_MC=1"
+	//Command with password
 	argsS := strings.Split(s, " ")
 	cmd := exec.Command(argsS[0], argsS[1:]...)
 	cmd.Start()
 
+	location, _ := time.LoadLocation("America/New_York")
+	timeS := time.Now().In(location)
+
+	if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": usernameStruct.Username}, bson.D{{"$set", bson.D{{"VmCreated", timeS}}}}); err != nil {
+		fmt.Println(err)
+	}
+
 	fmt.Println("VM Created")
-	sendReturn(`{"error": 0}`, w)
+	sendReturn(`{"error": 0, "vmCreated": "`+timeS.Format("2006-01-02 15:04:05")+`"}`, w)
 }
 
 /*
@@ -180,31 +191,10 @@ func StartVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 		cmd.Start()
 
 		fmt.Println("VM connected to websockify")
-		sendReturn(`{"error": 0, "port":`+strconv.Itoa(portNumber)+`}`, w)
+		sendReturn(`{"error": 0, "port": `+strconv.Itoa(portNumber)+`}`, w)
 	}
 
 }
-
-/*
-Check status of VM given username (on/off)
-
-(CAN FINISH LATER)
-
-func CheckVMStatus(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
-	vmName := "vm1"
-
-	s := "virsh list --all | grep " + vmName
-	fmt.Println(s)
-	args := strings.Split(s, " ")
-
-	out, err := exec.Command(args[0], args[1:]...).Output()
-	if err != nil {
-		log.Fatal(err)
-	} else {
-		fmt.Printf("%s", out)
-	}
-}
-*/
 
 /*
 Starts shutdown process on VM of given username.
@@ -378,7 +368,16 @@ func GetSnapshots(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 	}
 	arrayString += `]`
 
-	sendReturn(`{"snapshots": `+arrayString+`}`, w)
+	dateS := ""
+
+	if out.VmCreated.Format("2006-01-02 15:04:05") != "0001-01-01 00:00:00" {
+		dateS = out.VmCreated.Format("2006-01-02 15:04:05")
+	}
+
+	location, _ := time.LoadLocation("America/New_York")
+	timeN := time.Now().In(location).Format("2006-01-02 15:04:05")
+
+	sendReturn(`{"snapshots": "`+arrayString+`", "vmCreated": "`+dateS+`", "timeNow": "`+timeN+`"}`, w)
 	}
 }
 
