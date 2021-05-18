@@ -52,39 +52,6 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-/*
-func upload(w http.ResponseWriter, r *http.Request) {
-	scheme := ""
-	if (*r).Header["Referer"] != nil {
-		scheme = (*r).Header["Referer"][0][0:5]
-	}
-	allowOpts(&w, scheme)
-	if (*r).Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	} else {
-		fileManagement.FileUpload(w, r, db)
-	}
-}
-*/
-
-/*
-func testAuth(w http.ResponseWriter, r *http.Request) {
-	scheme := ""
-	fmt.Println("here")
-	if (*r).Header["Referer"] != nil {
-		scheme = (*r).Header["Referer"][0][0:5]
-	}
-	allowOpts(&w, scheme)
-	if (*r).Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	} else {
-		//userAuth.CompareToken(w, r, db)
-	}
-}
-*/
-
 func vmCreate(w http.ResponseWriter, r *http.Request) {
 	scheme := ""
 	if (*r).Header["Referer"] != nil {

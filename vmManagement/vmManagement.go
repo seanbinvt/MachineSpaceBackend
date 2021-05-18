@@ -14,14 +14,9 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	//"bytes"
-	//"io"
-	//"strings"
-	//"golang.org/x/crypto/bcrypt"
-	//"go.mongodb.org/mongo-driver/mongo"
 )
 
-const maxPort = 6000
+const maxPort = 5999
 const minPort = 5959
 
 var prevPort = minPort
@@ -72,7 +67,7 @@ func getPort(username string, collection *mongo.Collection) int {
 
 	// Iterate though possible ports and assign
 	portNumber := prevPort
-	for n := 0; n < maxPort-minPort; n++ {
+	for n := 0; n <= maxPort-minPort; n++ {
 		found := false
 		// Iterate through assigned user ports.
 		for i := 0; i < len(docs); i++ {
@@ -82,21 +77,21 @@ func getPort(username string, collection *mongo.Collection) int {
 			}
 		}
 
-		if portNumber == maxPort {
-			portNumber = minPort
-		} else if !found {
+		if !found {
 			// An open port is found, return and update user port in DB
 			_ = runCommand("fuser -k "+strconv.Itoa(portNumber)+"/tcp")
 			if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": username}, bson.D{{"$set", bson.D{{"Port", portNumber}}}}); err != nil {
 				fmt.Println(err)
 			}
 			return portNumber
+		} else if portNumber == maxPort {
+			portNumber = minPort
 		} else {
 			portNumber++
 		}
 	}
 	// All ports taken.
-	fmt.Println(portNumber)
+	fmt.Println("All ports taken")
 	return 0
 }
 
@@ -128,14 +123,14 @@ func CreateVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 	cmd := exec.Command(argsS[0], argsS[1:]...)
 	cmd.Start()
 
-	location, _ := time.LoadLocation("America/New_York")
+	location, _ := time.LoadLocation("UTC")
 	timeS := time.Now().In(location)
 
 	if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": usernameStruct.Username}, bson.D{{"$set", bson.D{{"VmCreated", timeS}}}}); err != nil {
 		fmt.Println(err)
 	}
 
-	fmt.Println("VM Created")
+	fmt.Println("VM Created  @ time " + timeS.Format("2006-01-02 15:04:05"))
 	sendReturn(`{"error": 0, "vmCreated": "`+timeS.Format("2006-01-02 15:04:05")+`"}`, w)
 }
 
@@ -203,6 +198,7 @@ error 0: VM shutdown successful.
 error 1: VM already shutdown.
 */
 func ShutdownVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
+	collection := db.Collection("users")
 	args, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
@@ -219,6 +215,10 @@ func ShutdownVM(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 	status := runCommand("virsh -c qemu:///system shutdown " + usernameStruct.Username)
 
 	if status {
+		if _, err := collection.UpdateOne(context.TODO(), bson.M{"Username": usernameStruct.Username}, bson.D{{"$set", bson.D{{"Port", 0}}}}); err != nil {
+			fmt.Println(err)
+		}
+
 		fmt.Println("VM Shutdown")
 		sendReturn(`{"error": 0}`, w)
 	} else {
@@ -336,6 +336,7 @@ func DeleteSnapshot(w http.ResponseWriter, r *http.Request, db *mongo.Database) 
 }
 
 func GetSnapshots(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
+
 	args, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
@@ -345,6 +346,7 @@ func GetSnapshots(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 	collection := db.Collection("users")
 
 	var usernameStruct Username
+
 	err = json.Unmarshal(args, &usernameStruct)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -357,16 +359,24 @@ func GetSnapshots(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 		log.Println(err)
 	} else {
 
-	arrayString := "["
+		valid := checkSessionExpiration(usernameStruct.Username, w, db)
+
+	if !valid {
+		sendReturn(`{"error": 5}`, w)
+	} else {
+	arrayString := `[`
 
 	for i := 0; i < len(out.Snapshots); i++ {
 		if i == len(out.Snapshots) - 1 {
 			arrayString += `"`+out.Snapshots[i]+`"`
+			break;
 		} else {
 			arrayString += `"`+out.Snapshots[i]+`", `
 		}
 	}
 	arrayString += `]`
+
+	fmt.Println(arrayString)
 
 	dateS := ""
 
@@ -374,17 +384,19 @@ func GetSnapshots(w http.ResponseWriter, r *http.Request, db *mongo.Database) {
 		dateS = out.VmCreated.Format("2006-01-02 15:04:05")
 	}
 
-	location, _ := time.LoadLocation("America/New_York")
+	location, _ := time.LoadLocation("UTC")
 	timeN := time.Now().In(location).Format("2006-01-02 15:04:05")
 
-	sendReturn(`{"snapshots": "`+arrayString+`", "vmCreated": "`+dateS+`", "timeNow": "`+timeN+`"}`, w)
+	sendReturn(`{"snapshots": `+arrayString+`, "vmCreated": "`+dateS+`", "timeNow": "`+timeN+`"}`, w)
 	}
+}
 }
 
 /*
 Sends the given JSON back as a respose to request
 */
 func sendReturn(jsonRes string, w http.ResponseWriter) {
+	fmt.Println(jsonRes)
 	var result map[string]interface{}
 
 	json.Unmarshal([]byte(jsonRes), &result)
@@ -405,4 +417,24 @@ func runCommand(s string) bool {
 
 	return err == nil
 
+}
+
+func checkSessionExpiration(username string, w http.ResponseWriter, db *mongo.Database) bool {
+	fmt.Println(username)
+	var out Document
+	collection := db.Collection("users")
+
+	// Check if user is already assigned a port
+	if err := collection.FindOne(context.TODO(), bson.M{"Username": username}).Decode(&out); err != nil {
+		log.Fatal(err)
+	}
+
+	location, _ := time.LoadLocation("UTC")
+	timeNow := time.Now().In(location)
+
+	if out.Expiration.Before(timeNow) {
+		return false
+	} else {
+		return true
+	}
 }
